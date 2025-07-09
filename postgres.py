@@ -8,9 +8,8 @@ def should_exclude(table_name: str) -> bool:
 
 def extract_schema(config: dict):
     conn = psycopg2.connect(**config)
-    cur = conn.cursor()
 
-    # Fetch all user tables from the 'public' schema
+    cur = conn.cursor()
     cur.execute("""
         SELECT table_name
         FROM information_schema.tables
@@ -23,7 +22,7 @@ def extract_schema(config: dict):
         if should_exclude(table_name):
             continue
 
-        print(f"\n-- Schema for table: {table_name}")
+        print(f"\nTABLE SCHEMA: {table_name}")
         cur.execute(f"""
             SELECT column_name, data_type, is_nullable, column_default
             FROM information_schema.columns
@@ -35,6 +34,52 @@ def extract_schema(config: dict):
             col_name, col_type, is_nullable, default = column
             print(f"{col_name} {col_type} {'NOT NULL' if is_nullable == 'NO' else 'NULL'}"
                   f"{' DEFAULT ' + str(default) if default else ''}")
+            
+        # === Get primary key columns ===
+        cur.execute("""
+            SELECT kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.table_name = %s AND tc.constraint_type = 'PRIMARY KEY';
+        """, (table_name,))
+        pk_cols = [row[0] for row in cur.fetchall()]
+        if pk_cols:
+            print(f"\nPRIMARY KEY: {', '.join(pk_cols)}")
+
+        # === Get foreign keys ===
+        cur.execute("""
+            SELECT
+                kcu.column_name,
+                ccu.table_name AS foreign_table,
+                ccu.column_name AS foreign_column
+            FROM
+                information_schema.table_constraints AS tc
+                JOIN information_schema.key_column_usage AS kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage AS ccu
+                  ON ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = %s;
+        """, (table_name,))
+        fks = cur.fetchall()
+        if fks:
+            print("\nFOREIGN KEYS:")
+            for col, ref_table, ref_col in fks:
+                print(f"  - {col} → {ref_table}.{ref_col}")
+
+        # === Get unique constraints ===
+        cur.execute("""
+            SELECT kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+              ON tc.constraint_name = kcu.constraint_name
+            WHERE tc.table_name = %s AND tc.constraint_type = 'UNIQUE';
+        """, (table_name,))
+        uniques = [row[0] for row in cur.fetchall()]
+        if uniques:
+            print(f"\nUNIQUE: {', '.join(uniques)}")
+
+        print("\n--------------------------------\n")
 
     cur.close()
     conn.close()
