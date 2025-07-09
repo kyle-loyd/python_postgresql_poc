@@ -1,5 +1,5 @@
 from custom_enum import DBType
-from postgres import extract_schema as get_pg_schema
+from postgres import get_db_metadata as get_pg_metadata
 
 class DBConnectionConfig():
     def __init__(self, environment, db_type):
@@ -23,7 +23,12 @@ class DBConnection():
     def __init__(self, config: DBConnectionConfig):
         self.config = config
 
-    def get_schema(self):
+    def get_metadata(self):
         if self.config.db_type == DBType.Postgres:
             config_dict = self.config.get_postgres_config_dict()
-            schema = get_pg_schema(config_dict)
+            table_data, view_data = get_pg_metadata(config_dict)
+        if self.config.db_type == DBType.SqlSvr:
+            table_data = None
+            view_data = None 
+            #TODO: Implement SqlSvr
+        return table_data, view_data
