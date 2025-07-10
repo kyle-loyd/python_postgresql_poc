@@ -1,8 +1,17 @@
 import psycopg2
 
-def should_exclude(table_name: str) -> bool:
-    EXCLUDE_SUBSTRINGS = ['temp', 'audit', 'log', "test"]
-    return any(substr.lower() in table_name.lower() for substr in EXCLUDE_SUBSTRINGS)
+def get_database_list(config):
+    with psycopg2.connect(dbname='postgres', **config) as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT datname
+                FROM pg_database
+                WHERE datistemplate = false
+                  AND datallowconn = true;
+            """)
+            dbs = cur.fetchall()
+            for (db_name,) in dbs:
+                yield db_name
 
 def yield_table(cur):
     cur.execute("""
@@ -13,8 +22,7 @@ def yield_table(cur):
 
     tables = cur.fetchall()
     for (table_name,) in tables:
-        if not should_exclude(table_name):
-            yield table_name
+        yield table_name
 
 def get_schema(cur, table_name):
     cur.execute(f"""
@@ -38,16 +46,23 @@ def get_pks(cur, table_name):
 def get_fks(cur, table_name):
     cur.execute("""
         SELECT
-            kcu.column_name,
-            ccu.table_name AS foreign_table,
-            ccu.column_name AS foreign_column
-        FROM
-            information_schema.table_constraints AS tc
-            JOIN information_schema.key_column_usage AS kcu
-                ON tc.constraint_name = kcu.constraint_name
-            JOIN information_schema.constraint_column_usage AS ccu
-                ON ccu.constraint_name = tc.constraint_name
-        WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_name = %s;
+            tc.constraint_name,
+            kcu.table_name AS source_table,
+            array_agg(kcu.column_name ORDER BY kcu.ordinal_position)::TEXT[] AS source_columns,
+            ccu.table_name AS target_table,
+            array_agg(ccu.column_name ORDER BY kcu.ordinal_position)::TEXT[] AS target_columns,
+            tc.constraint_type
+        FROM information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kcu
+            ON tc.constraint_name = kcu.constraint_name
+        JOIN information_schema.referential_constraints rc
+            ON tc.constraint_name = rc.constraint_name
+        JOIN information_schema.constraint_column_usage ccu
+            ON rc.unique_constraint_name = ccu.constraint_name
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND kcu.table_name = %s
+        GROUP BY tc.constraint_name, kcu.table_name, ccu.table_name, tc.constraint_type;
     """, (table_name,))
     return cur.fetchall()
 
@@ -83,8 +98,7 @@ def yield_view(cur):
     """)
     views = [row[0] for row in cur.fetchall()]
     for view_name in views:
-        if not should_exclude(view_name):
-            yield view_name
+        yield view_name
             
 def get_definition(cur, view_name):
     cur.execute("""
@@ -94,7 +108,8 @@ def get_definition(cur, view_name):
     """, (view_name,))
     return cur.fetchone()[0]
 
-def get_db_metadata(config: dict):
+def get_db_metadata(config: dict, db_name: str):
+    config["dbname"] = db_name
     conn = psycopg2.connect(**config)
     cur = conn.cursor()
     
@@ -128,3 +143,16 @@ def get_db_metadata(config: dict):
     conn.close()
 
     return table_data, view_data
+
+def get_metadata(config: dict):
+    db_generator = get_database_list(config)
+    db_data = []
+    for db_name in db_generator:
+        tables, views = get_db_metadata(config, db_name)
+        data = {
+            "tables": tables,
+            "views": views
+        }
+        db_data.append({db_name: data})
+    
+    return db_data

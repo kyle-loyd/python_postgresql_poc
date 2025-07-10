@@ -1,12 +1,11 @@
 from custom_enum import DBType
-from postgres import get_db_metadata as get_pg_metadata
+from postgres import get_metadata as get_pg_metadata
 
 class DBConnectionConfig():
     def __init__(self, environment, db_type):
         self.db_type = db_type
         self.host = environment.get("DB_HOST")
         self.port = environment.get("DB_PORT")
-        self.db_name = environment.get("DB_NAME")
         self.username = environment.get("DB_USER_NAME")
         self.password = environment.get("DB_USER_PASS")
 
@@ -14,7 +13,6 @@ class DBConnectionConfig():
         return {
             'host': self.host,
             'port': self.port,
-            'database': self.db_name,
             'user': self.username,
             'password': self.password
         }   
@@ -26,9 +24,10 @@ class DBConnection():
     def get_metadata(self):
         if self.config.db_type == DBType.Postgres:
             config_dict = self.config.get_postgres_config_dict()
-            table_data, view_data = get_pg_metadata(config_dict)
+            db_data = get_pg_metadata(config_dict)
+        
         if self.config.db_type == DBType.SqlSvr:
-            table_data = None
-            view_data = None 
+            db_data = None
             #TODO: Implement SqlSvr
-        return table_data, view_data
+
+        return db_data

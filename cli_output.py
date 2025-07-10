@@ -19,8 +19,9 @@ def print_pks(pks):
 def print_fks(fks):
     if fks:
         print("\nFOREIGN KEYS:")
-        for col, ref_table, ref_col in fks:
-            print(f"  - {col} → {ref_table}.{ref_col}")
+        for row in fks:
+            print(f"  - {row[0]}:")
+            print(f"      {row[1]}({', '.join(row[2])}) → {row[3]}({', '.join(row[4])})")
 
 def print_uniques(uniques):
     uniques_cols = [row[0] for row in uniques]
@@ -37,11 +38,10 @@ def print_view_definition(view_name, definition):
     print(f"\nVIEW: {view_name}")
     print(f"CREATE OR REPLACE VIEW {view_name} AS\n{definition};")
 
-def print_results(tables, views):
-    print(header_template("Table Schemas"))
+def print_tables(tables):
     for table_info in tables:
         for table_name, data in table_info.items():
-            print(f"TABLE: {table_name}")
+            print(f"*** TABLE: {table_name} ***")
             print_schema(data["schema"])
             print_pks(data["pks"])
             print_fks(data["fks"])
@@ -49,8 +49,16 @@ def print_results(tables, views):
             print_checks(data["checks"])
             print(SPACER)
     
-    print(header_template("View Definitions"))
+def print_views(views):
     for view_info in views:
         for view_name, data in view_info.items():
+            print(f"*** VIEW: {view_name} ***")
             print_view_definition(view_name, data["definition"])
-            print(SPACER)   
+            print(SPACER)
+
+def print_results(dbs):
+    for db_info in dbs:
+        for db_name, data in db_info.items():
+            print(header_template(f"Database: {db_name}"))
+            print_tables(data["tables"])
+            print_views(data["views"]) 

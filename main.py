@@ -28,5 +28,5 @@ if __name__ == "__main__":
     db_type = get_db_type(sys.argv[1])
     db_config = DBConnectionConfig(os.environ, db_type)
     db = DBConnection(db_config)
-    tables, views = db.get_metadata()
-    print_results(tables, views)
+    db_data = db.get_metadata()
+    print_results(db_data)
