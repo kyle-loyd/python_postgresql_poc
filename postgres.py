@@ -108,6 +108,21 @@ def get_definition(cur, view_name):
     """, (view_name,))
     return cur.fetchone()[0]
 
+def get_ddl(schema, pks, table_name):
+    col_defs = []
+    for col_name, data_type, nullable, default in schema:
+        col_def = f"{col_name} {data_type}"
+        if nullable == "NO":
+            col_def += " NOT NULL"
+        if default:
+            col_def += f" DEFAULT {default}"
+        col_defs.append(col_def)
+    pk_clause = ""
+    if pks:
+        pk_cols = [col for (col,) in pks]
+        pk_clause = f",\n    PRIMARY KEY ({', '.join(pk_cols)})"
+    return f"CREATE TABLE {table_name} (\n    " + ",\n    ".join(col_defs) + pk_clause + "\n);"
+
 def get_db_metadata(config: dict, db_name: str):
     config["dbname"] = db_name
     conn = psycopg2.connect(**config)
@@ -118,15 +133,13 @@ def get_db_metadata(config: dict, db_name: str):
     for table_name in table_generator:
         schema = get_schema(cur, table_name)
         pks = get_pks(cur, table_name)
-        fks = get_fks(cur, table_name)
-        uniques = get_unique(cur, table_name)        
-        checks = get_checks(cur, table_name)
         data = {
             "schema": schema,
             "pks": pks,
-            "fks": fks,
-            "uniques": uniques,
-            "checks": checks
+            "fks": get_fks(cur, table_name),
+            "uniques": get_unique(cur, table_name),
+            "checks": get_checks(cur, table_name),
+            "ddl": get_ddl(schema, pks, table_name)
         }
         table_data.append({table_name: data})
 

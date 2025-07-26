@@ -38,6 +38,10 @@ def print_view_definition(view_name, definition):
     print(f"\nVIEW: {view_name}")
     print(f"CREATE OR REPLACE VIEW {view_name} AS\n{definition};")
 
+def print_ddl(ddl):
+    print(f"\nDDL:")
+    print(ddl)
+
 def print_tables(tables):
     for table_info in tables:
         for table_name, data in table_info.items():
@@ -47,6 +51,7 @@ def print_tables(tables):
             print_fks(data["fks"])
             print_uniques(data["uniques"])
             print_checks(data["checks"])
+            print_ddl(data["ddl"])
             print(SPACER)
     
 def print_views(views):
